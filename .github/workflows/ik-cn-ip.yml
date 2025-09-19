@@ -25,12 +25,11 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 安装依赖（如果脚本需要额外包）
+      # 安装依赖（包括 requests）
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # 如果 ikai_cni_p.py 需要其他包，请在这里添加，例如：
-          # pip install requests
+          pip install requests
 
       # 运行 Python 脚本生成 IP 列表
       - name: Run ikai_cni_p.py
