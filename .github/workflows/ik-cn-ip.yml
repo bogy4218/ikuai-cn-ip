@@ -14,7 +14,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PAT }}
+          token: ${{ PAT }}
           persist-credentials: true  # 保留凭证以便后续 git push
 
       # 2. 设置 Python 环境
