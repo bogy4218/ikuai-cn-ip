@@ -1,0 +1,39 @@
+name: Update IP List
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 每天 UTC 2:00（北京时间 10:00）
+  workflow_dispatch:      # 允许手动运行
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT }}
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run ikai script
+        run: python ikai_cni_p.py
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.PAT }}
+          commit-message: "🤖 Auto-update ikuai_cn_ipgroup.txt"
+          title: "Update IP list"
+          body: |
+            Automated update of ikuai_cn_ipgroup.txt.
+            Powered by GitHub Actions.
+          branch: update-ip-list
+          delete-branch: true
