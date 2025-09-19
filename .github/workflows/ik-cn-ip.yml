@@ -1,51 +1,36 @@
-name: Update iKuai CN IP List
+name: Update IP List
 
 on:
   schedule:
-    - cron: '0 8 * * *'  # 每天 UTC 2:00 (北京时间 10:00)
-  workflow_dispatch:
+    # 每天北京时间 10:00 (UTC 2:00) 运行
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
-  update-ip-list:
+  update:
     runs-on: ubuntu-latest
-
     steps:
-      # 检出代码，并赋予 GITHUB_TOKEN 写入权限
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # 显式请求写入权限
-          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install requests
+      - name: Install requests
+        run: pip install requests
 
-      - name: Run ikai_cni_p.py
+      - name: Run ikai script
         run: python ikai_cni_p.py
 
-      - name: Check for changes
-        id: changes
-        run: |
-          if git diff --name-only | grep -q "ikuai_cn_ipgroup.txt"; then
-            echo "has_changes=true" >> $GITHUB_ENV
-          else
-            echo "has_changes=false" >> $GITHUB_ENV
-          fi
-
-      # 仅当有更改时提交并推送
-      - name: Commit and push if changed
-        if: env.has_changes == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ikuai_cn_ipgroup.txt
-          git commit -m "🤖 Auto-update ikuai_cn_ipgroup.txt"
-          git push
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "🤖 Auto-update ikuai_cn_ipgroup.txt"
+          title: "Update IP list"
+          body: |
+            Automated update of `ikuai_cn_ipgroup.txt`.
+            Run by GitHub Actions.
+          branch: update-ip-list  # 每次使用同一分支，避免垃圾分支
+          delete-branch: true     # 合并后自动删除分支
