@@ -1,58 +1,97 @@
-name: Update iKuai CN IP List
+name: 每日更新爱快国内IP分组
 
+# 触发条件：每天定时运行 + 手动触发测试
 on:
   schedule:
-    - cron: '0 0/6 * * *'  # 每 6 小时运行一次（UTC 时间）
-  workflow_dispatch:       # 允许手动触发
+    # Cron 表达式（UTC时区，以下为 每天北京时间 02:00 执行）
+    - cron: '0 18 * * *'
+  workflow_dispatch:  # 允许在 GitHub 页面手动触发
 
 jobs:
-  update-ip:
-    runs-on: ubuntu-latest
-
+  update-ipgroup:
+    runs-on: ubuntu-latest  # 使用 Ubuntu 最新环境
     steps:
-      # 1. 检出代码（使用 PAT 权限）
-      - name: Checkout code
+      ##########################################################################
+      # 步骤1：拉取仓库代码（确保获取最新版本）
+      ##########################################################################
+      - name: 拉取仓库代码
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PTA }}
-          persist-credentials: true  # 保留凭证以便后续 git push
+          fetch-depth: 0  # 拉取完整历史，避免浅克隆导致的文件跟踪问题
+          token: ${{ secrets.PAT }}  # 使用PAT进行克隆，避免权限问题
 
-      # 2. 设置 Python 环境
-      - name: Set up Python
+      ##########################################################################
+      # 步骤2：安装 Python 环境（适配脚本运行）
+      ##########################################################################
+      - name: 配置 Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'  # 与脚本兼容的 Python 版本
 
-      # 3. 安装依赖（如果需要）
-      - name: Install dependencies
+      ##########################################################################
+      # 步骤3：安装脚本依赖（必装 requests，脚本中已引用）
+      ##########################################################################
+      - name: 安装依赖库
         run: |
-          pip install --upgrade pip
-          pip install requests  # 如果 ikai_cni_p.py 用到 requests
+          python -m pip install --upgrade pip
+          pip install requests  # 脚本依赖此库
 
-      # 4. 运行 ikai_cni_p.py 脚本（生成 ikuai_cn_ipgroup.txt）
-      - name: Run ikai script
-        run: python ikai_cni_p.py
-
-      # 5. 运行您原有的其他脚本（可选保留）
-      - name: Run meta_merge.py
-        run: python meta_merge.py
-
-      - name: Run merge.py (Shadowrocket)
-        run: python merge.py
-
-      - name: Run sing-box.py
-        run: python sing-box.py
-
-      # 6. 提交更改（如果有）
-      - name: Commit and push changes
+      ##########################################################################
+      # 步骤4：运行脚本生成/更新 IP 分组文件
+      ##########################################################################
+      - name: 执行脚本生成 IP 分组文件
         run: |
-          if git diff --quiet; then
-            echo "✅ No changes detected."
-          else
-            echo "📝 Changes detected, committing and pushing..."
-            git config user.name "GitHub Action"
-            git config user.email "actions@github.com"
-            git add .
-            git commit -m "🤖 Auto-update files: $(date '+%Y-%m-%d %H:%M:%S')"
-            git push origin main  # 替换为您的默认分支名（如 main 或 master）
+          echo "=== 开始运行 ikai_cni_p.py 生成文件 ==="
+          python "ikai_cni_p.py"  # 运行正确的脚本名称
+          
+          # 检查文件是否生成成功
+          if [ ! -f "ikuai_cn_ipgroup.txt" ]; then
+            echo "ERROR: 未生成目标 IP 分组文件！"
+            ls -l  # 列出现有文件，便于排查问题
+            exit 1
           fi
+          
+          echo "=== 生成的文件如下 ==="
+          ls -l ikuai_cn_ipgroup.txt  # 确认文件存在
+
+      ##########################################################################
+      # 步骤5：提交更新后的文件到仓库（使用PAT解决权限问题）
+      ##########################################################################
+      - name: 提交并推送文件到 GitHub
+        run: |
+          # 配置 Git 提交身份
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          
+          # 拉取最新代码，避免冲突
+          git pull origin main --rebase
+          
+          # 添加生成的 IP 分组文件
+          git add ./ikuai_cn_ipgroup.txt
+          
+          # 检查暂存区状态（便于日志排查）
+          echo "=== 暂存区状态 ==="
+          git status
+          
+          # 仅在有新文件/修改时提交（避免空提交）
+          if git diff --cached --quiet; then
+            echo "=== 无新文件或修改，无需提交 ==="
+          else
+            git commit -m "每日自动更新国内IP分组文件（生成时间：${{ github.run_started_at }}）"
+            git push origin main  # 推送至 main 分支
+            echo "=== 文件提交并推送成功 ==="
+          fi
+        env:
+          # 使用PAT进行推送，解决权限问题
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+
+      ##########################################################################
+      # 步骤6（可选）：清理旧工作流记录（避免日志堆积）
+      ##########################################################################
+      - name: 清理旧工作流记录（保留最近5条）
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.PAT }}  # 同样使用PAT
+          repository: ${{ github.repository }}
+          keep_minimum_runs: 5
+          workflow_id: "每日更新爱快国内IP分组"  # 需与工作流名称一致
