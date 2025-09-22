@@ -2,7 +2,7 @@ name: 每日更新爱快国内IP分组
 
 on:
   schedule:
-    - cron: '0 18 * * *'  # 每天北京时间02:00执行
+    - cron: '0 12 * * *'  # 每天北京时间02:00执行
   workflow_dispatch:
 
 jobs:
