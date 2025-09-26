@@ -1,57 +1,42 @@
-name: 每日更新爱快国内IP分组
+name: 更新国内IP分组
 
 on:
   schedule:
-    - cron: '0 12 * * *'  # 每天北京时间20:00执行
-  workflow_dispatch:
+    - cron: '0 0 * * *'  # 每天 UTC 0 点执行（北京时间 8 点）
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
-  update-ipgroup:
+  update-ipgroups:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 拉取代码仓库
+        uses: actions/checkout@v4
+
+      - name: 设置Python环境
+        uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
+          python-version: '3.10'  # 指定Python版本
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - run: |
-          python -m pip install --upgrade pip
-          pip install requests
-
-      - run: |
-          echo "=== 开始生成 IPv4 和 IPv6 分组文件 ==="
-          python .github/scripts/generate_ikuai_ipgroups.py
-          
-          if [ ! -f "ikuai_cn_ipv4group.txt" ] || [ ! -f "ikuai_cn_ipv6group.txt" ]; then
-            echo "ERROR: 未生成目标IP分组文件！"
-            exit 1
-          fi
-
-      - name: 提交并推送文件到GitHub
+      - name: 安装依赖
         run: |
-          git config --global user.name "GitHub Actions Bot"
+          python -m pip install --upgrade pip
+          pip install requests  # 脚本依赖requests库
+
+      - name: 运行生成脚本
+        run: |
+          python ikuai_ipgroups.py  # 执行脚本生成IP分组文件
+
+      - name: 检查文件变化
+        id: check_changes
+        run: |
+          git status --porcelain
+          echo "changes=$(git status --porcelain | wc -l)" >> $GITHUB_OUTPUT
+
+      - name: 提交更新
+        if: steps.check_changes.outputs.changes > 0
+        run: |
+          git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          
-          # 保存当前修改
-          git stash
-          
-          # 拉取远程更新
-          git pull origin main --rebase
-          
-          # 恢复修改
-          git stash pop || true
-          
-          git add ./ikuai_cn_ipv4group.txt ./ikuai_cn_ipv6group.txt
-          
-          if git diff --cached --quiet; then
-            echo "=== 无新文件或修改，无需提交 ==="
-          else
-            git commit -m "每日自动更新国内IP分组文件（生成时间：${{ github.run_started_at }}）"
-            git push origin main
-            echo "=== 文件提交并推送成功 ==="
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git add ikuai_cn_ipv4group.txt ikuai_cn_ipv6group.txt
+          git commit -m "自动更新IP分组 $(date +'%Y-%m-%d')"
+          git push
