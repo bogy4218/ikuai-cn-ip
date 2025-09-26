@@ -1,32 +1,57 @@
-import requests
+name: 每日更新爱快国内IP分组
 
-# 国内IPv4 CIDR列表源（你可以换成其他可靠源）
-IPV4_URL = "https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt"
-# 国内IPv6 CIDR列表源（可选）
-IPV6_URL = "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/master/ipv6.txt"
+on:
+  schedule:
+    - cron: '0 12 * * *'  # 每天北京时间20:00执行
+  workflow_dispatch:
 
-def fetch_cidrs(url):
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        # 按行分割并过滤空行
-        return [line.strip() for line in resp.text.splitlines() if line.strip()]
-    except Exception as e:
-        print(f"获取 {url} 失败: {e}")
-        return []
+jobs:
+  update-ipgroup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-def save_ikuai_format(filename, cidrs):
-    with open(filename, "w", encoding="utf-8") as f:
-        # 爱快导入格式每行一个 CIDR
-        for cidr in cidrs:
-            f.write(cidr + "\n")
-    print(f"已保存 {len(cidrs)} 条记录到 {filename}")
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-if __name__ == "__main__":
-    ipv4_list = fetch_cidrs(IPV4_URL)
-    ipv6_list = fetch_cidrs(IPV6_URL)
+      - run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
-    if ipv4_list:
-        save_ikuai_format("ikuai_cn_ipv4group.txt", ipv4_list)
-    if ipv6_list:
-        save_ikuai_format("ikuai_cn_ipv6group.txt", ipv6_list)
+      - run: |
+          echo "=== 开始生成 IPv4 和 IPv6 分组文件 ==="
+          python .github/scripts/generate_ikuai_ipgroups.py
+          
+          if [ ! -f "ikuai_cn_ipv4group.txt" ] || [ ! -f "ikuai_cn_ipv6group.txt" ]; then
+            echo "ERROR: 未生成目标IP分组文件！"
+            exit 1
+          fi
+
+      - name: 提交并推送文件到GitHub
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          
+          # 保存当前修改
+          git stash
+          
+          # 拉取远程更新
+          git pull origin main --rebase
+          
+          # 恢复修改
+          git stash pop || true
+          
+          git add ./ikuai_cn_ipv4group.txt ./ikuai_cn_ipv6group.txt
+          
+          if git diff --cached --quiet; then
+            echo "=== 无新文件或修改，无需提交 ==="
+          else
+            git commit -m "每日自动更新国内IP分组文件（生成时间：${{ github.run_started_at }}）"
+            git push origin main
+            echo "=== 文件提交并推送成功 ==="
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
