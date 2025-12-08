@@ -44,14 +44,14 @@ jobs:
           python "ikai_cni_p.py"  # 执行目标脚本
           
           # 检查文件是否生成成功（匹配脚本输出的固定文件名）
-          if [ ! -f "ikuai_cn_ipgroup.txt" ]; then
-            echo "ERROR: 未生成目标文件 ikuai_cn_ipgroup.txt！"
+          if [ ! -f "ikuai_cn_province_ipgroup.txt" ]; then
+            echo "ERROR: 未生成目标文件 ikuai_cn_province_ipgroup.txt！"
             ls -l  # 列出现有文件，便于排查问题
             exit 1
           fi
           
           echo "=== 生成的文件如下 ==="
-          ls -l ikuai_cn_ipgroup.txt  # 确认文件存在
+          ls -l ikuai_cn_province_ipgroup.txt  # 确认文件存在
 
       ##########################################################################
       # 步骤5：提交更新后的文件到仓库
@@ -72,7 +72,7 @@ jobs:
           git stash pop || true  # 即使没有暂存内容也不报错
           
           # 添加生成的 IP 分组文件（固定文件名）
-          git add ./ikuai_cn_ipgroup.txt
+          git add ./ikuai_cn_province_ipgroup.txt
           
           # 检查暂存区状态（便于日志排查）
           echo "=== 暂存区状态 ==="
