@@ -1,52 +1,63 @@
-name: Update iKuai Province IP Groups
+name: 定时更新省份IP分组
 
 on:
   # 每天UTC时间0点运行（北京时间8点）
   schedule:
     - cron: '0 0 * * *'
-  # 允许手动触发
+  # 允许手动触发工作流
   workflow_dispatch:
 
 jobs:
-  update-ip-groups:
+  update-province-ip:
     runs-on: ubuntu-latest
     steps:
-      # 检出代码
-      - name: Checkout repository
+      # 检出代码仓库
+      - name: 拉取代码
         uses: actions/checkout@v4
 
       # 设置Python环境
-      - name: Set up Python
+      - name: 配置Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 安装依赖
-      - name: Install dependencies
+      # 安装依赖（脚本需要requests库）
+      - name: 安装依赖包
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
       # 运行脚本生成IP分组文件
-      - name: Generate iKuai province IP groups
+      - name: 执行生成脚本
         run: python ikai_cni_p.py
 
-      # 检查文件是否有变化
-      - name: Check for changes
-        id: check_changes
+      # 验证文件是否生成
+      - name: 检查输出文件
         run: |
-          if git diff --name-only | grep -q "ikuai_cn_province_ipgroup.txt"; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
+          if [ ! -f "ikuai_cn_province_ipgroup.txt" ]; then
+            echo "错误：未生成目标文件 ikuai_cn_province_ipgroup.txt"
+            exit 1
           fi
 
-      # 提交更新的文件
-      - name: Commit and push changes
+      # 检查文件变化
+      - name: 检测文件修改
+        id: check_changes
+        run: |
+          if git diff --quiet ikuai_cn_province_ipgroup.txt; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      # 提交并推送更新
+      - name: 提交更新
         if: steps.check_changes.outputs.changed == 'true'
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+          git pull origin main --rebase
           git add ikuai_cn_province_ipgroup.txt
-          git commit -m "Auto update iKuai province IP groups $(date +'%Y-%m-%d')"
+          git commit -m "自动更新省份IP分组 $(date +'%Y-%m-%d')"
           git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
