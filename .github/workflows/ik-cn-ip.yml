@@ -13,6 +13,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # 拉取完整仓库历史，避免浅克隆导致冲突
 
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
@@ -29,7 +30,6 @@ jobs:
           python ikai_cni_p.py
           ls -la ikuai_cn_province_ipgroup.txt || exit 1
 
-      # 关键：只在文件真正有变化时才提交（避免重复提交）
       - name: 检查文件是否有变化
         id: check_changes
         run: |
@@ -40,11 +40,16 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
+          
+          # 关键：拉取远程最新代码（解决 stale info 冲突）
+          git pull origin ${{ github.event.repository.default_branch }} --rebase
+          
           git add ikuai_cn_province_ipgroup.txt
           git commit -m "自动更新爱快国内IP分组 $(date +'%Y-%m-%d %H:%M:%S')"
+          
+          # 使用 --force-with-lease 安全强制推送（仅覆盖本地已拉取的最新版本）
           git push origin HEAD:${{ github.event.repository.default_branch }} --force-with-lease
 
-      # 可选：删除旧的工作流记录，防止堆几千条
       - name: 删除旧的工作流运行记录（保留最近10条）
         uses: Mattraks/delete-workflow-runs@v2
         with:
