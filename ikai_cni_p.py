@@ -42,6 +42,7 @@ PROVINCE_MAPPING = {
 BASE_REPO_URL = "https://raw.githubusercontent.com/metowolf/iplist/master/data/country/CN/"
 IP_GROUP_FILENAME = "ikuai_cn_province_ipgroup.txt"  # 输出文件名
 START_ID = 60  # ikuai分组起始ID
+MAX_IP_PER_GROUP = 1000  # 爱快单个分组最大IP段数量
 
 
 def validate_cidr(cidr):
@@ -75,8 +76,14 @@ def fetch_province_cidrs(province_code):
         return None
 
 
+def split_into_chunks(lst, chunk_size):
+    """将列表拆分为指定大小的子列表"""
+    for i in range(0, len(lst), chunk_size):
+        yield lst[i:i + chunk_size]
+
+
 def generate_province_ipgroup():
-    """生成按省份分类的ikuai IP分组文件"""
+    """生成按省份分类的ikuai IP分组文件（支持超过1000条时自动拆分）"""
     # 清除旧文件
     if os.path.exists(IP_GROUP_FILENAME):
         os.remove(IP_GROUP_FILENAME)
@@ -84,6 +91,7 @@ def generate_province_ipgroup():
     
     current_id = START_ID
     success_count = 0
+    total_groups = 0
     
     with open(IP_GROUP_FILENAME, 'w', encoding='utf-8') as f:
         # 遍历所有省份，按简称排序
@@ -97,26 +105,38 @@ def generate_province_ipgroup():
                 print(f"跳过：{province_name}无有效IP段\n")
                 continue
             
-            # 按ikuai格式写入（支持超过1000个IP段，自动适配）
-            addr_pool = ','.join(cidrs)
-            # ikuai分组格式：id=xx comment= type=0 group_name=省份名称 addr_pool=CIDR1,CIDR2,...
-            line = f"id={current_id} comment= type=0 group_name={province_name}IP addr_pool={addr_pool}\n"
-            f.write(line)
+            # 计算需要拆分的组数
+            total_cidrs = len(cidrs)
+            num_chunks = (total_cidrs + MAX_IP_PER_GROUP - 1) // MAX_IP_PER_GROUP  # 向上取整
             
-            print(f"成功：{province_name} - {len(cidrs)}个IP段 - ID:{current_id}")
-            current_id += 1
+            # 拆分并写入多个分组
+            for i, chunk in enumerate(split_into_chunks(cidrs, MAX_IP_PER_GROUP), 1):
+                # 组名格式：省份名称IP(1)、省份名称IP(2)等
+                group_name = f"{province_name}IP" + (f"({i})" if num_chunks > 1 else "")
+                addr_pool = ','.join(chunk)
+                
+                # 写入爱快格式
+                line = f"id={current_id} comment= type=0 group_name={group_name} addr_pool={addr_pool}\n"
+                f.write(line)
+                
+                print(f"成功：{group_name} - {len(chunk)}个IP段 - ID:{current_id}")
+                current_id += 1
+                total_groups += 1
+            
             success_count += 1
-            print()  # 空行分隔
+            print(f"{province_name}处理完成，共{num_chunks}个分组，{total_cidrs}个IP段\n")
     
     print(f"\n生成完成！文件：{IP_GROUP_FILENAME}")
-    print(f"统计：成功生成{success_count}个省份分组（共{len(PROVINCE_MAPPING)}个省份）")
+    print(f"统计：成功处理{success_count}个省份（共{len(PROVINCE_MAPPING)}个省份）")
+    print(f"生成总分组数：{total_groups}")
     print(f"分组ID范围：{START_ID} - {current_id - 1}")
 
 
 def main():
     print("=== 开始生成ikuai省份IP分组文件 ===")
     print(f"数据来源：{BASE_REPO_URL}")
-    print(f"目标文件：{IP_GROUP_FILENAME}\n")
+    print(f"目标文件：{IP_GROUP_FILENAME}")
+    print(f"单个分组最大IP段限制：{MAX_IP_PER_GROUP}\n")
     
     generate_province_ipgroup()
     print("\n=== 生成结束 ===")
