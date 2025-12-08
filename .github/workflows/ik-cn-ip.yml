@@ -1,57 +1,102 @@
 name: 每日更新爱快国内IP分组
 
+# 触发条件：每天定时运行 + 手动触发测试
 on:
   schedule:
-    - cron: '0 18 * * *'  # UTC 时间，每天北京时间 02:00
-  workflow_dispatch:
+    # Cron 表达式（UTC时区，每天北京时间 02:00 执行）
+    - cron: '0 18 * * *'
+  workflow_dispatch:  # 允许在 GitHub 页面手动触发
 
 jobs:
-  update-cn-ip:
-    runs-on: ubuntu-latest
+  update-ipgroup:
+    runs-on: ubuntu-latest  # 使用 Ubuntu 最新环境
     steps:
+      ##########################################################################
+      # 步骤1：拉取仓库代码（确保获取最新版本）
+      ##########################################################################
       - name: 拉取仓库代码
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0  # 拉取完整仓库历史，避免浅克隆导致冲突
+          fetch-depth: 0  # 拉取完整历史，避免浅克隆导致的文件跟踪问题
 
-      - name: 设置 Python 环境
+      ##########################################################################
+      # 步骤2：安装 Python 环境（适配脚本运行）
+      ##########################################################################
+      - name: 配置 Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.10'  # 与脚本兼容的 Python 版本
 
-      - name: 安装依赖
+      ##########################################################################
+      # 步骤3：安装脚本依赖（必装 requests，脚本中已引用）
+      ##########################################################################
+      - name: 安装依赖库
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install requests  # 脚本依赖 requests 库
 
-      - name: 运行脚本生成国内IP分组
+      ##########################################################################
+      # 步骤4：运行 ikai_cni_p.py 生成/更新 IP 分组文件
+      ##########################################################################
+      - name: 执行脚本生成 IP 分组文件
         run: |
-          python ikai_cni_p.py
-          ls -la ikuai_cn_province_ipgroup.txt || exit 1
+          echo "=== 开始运行 ikai_cni_p.py 生成文件 ==="
+          python "ikai_cni_p.py"  # 执行目标脚本
+          
+          # 检查文件是否生成成功（匹配脚本输出的固定文件名）
+          if [ ! -f "ikuai_cn_province_ipgroup.txt" ]; then
+            echo "ERROR: 未生成目标文件 ikuai_cn_province_ipgroup.txt！"
+            ls -l  # 列出现有文件，便于排查问题
+            exit 1
+          fi
+          
+          echo "=== 生成的文件如下 ==="
+          ls -l ikuai_cn_province_ipgroup.txt  # 确认文件存在
 
-      - name: 检查文件是否有变化
-        id: check_changes
+      ##########################################################################
+      # 步骤5：提交更新后的文件到仓库
+      ##########################################################################
+      - name: 提交并推送文件到 GitHub
         run: |
-          git diff --quiet ikuai_cn_province_ipgroup.txt || echo "changed=true" >> $GITHUB_OUTPUT
-
-      - name: 提交并推送（仅当有变化时）
-        if: steps.check_changes.outputs.changed == 'true'
-        run: |
+          # 配置 Git 提交身份
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           
-          # 关键：拉取远程最新代码（解决 stale info 冲突）
-          git pull origin ${{ github.event.repository.default_branch }} --rebase
+          # 暂存本地修改（解决 pull 冲突）
+          git stash
           
-          git add ikuai_cn_province_ipgroup.txt
-          git commit -m "自动更新爱快国内IP分组 $(date +'%Y-%m-%d %H:%M:%S')"
+          # 拉取最新代码，避免冲突
+          git pull origin main --rebase
           
-          # 使用 --force-with-lease 安全强制推送（仅覆盖本地已拉取的最新版本）
-          git push origin HEAD:${{ github.event.repository.default_branch }} --force-with-lease
+          # 恢复暂存的修改（如果有的话）
+          git stash pop || true  # 即使没有暂存内容也不报错
+          
+          # 添加生成的 IP 分组文件（固定文件名）
+          git add ./ikuai_cn_province_ipgroup.txt
+          
+          # 检查暂存区状态（便于日志排查）
+          echo "=== 暂存区状态 ==="
+          git status
+          
+          # 仅在有新文件/修改时提交（避免空提交）
+          if git diff --cached --quiet; then
+            echo "=== 无新文件或修改，无需提交 ==="
+          else
+            git commit -m "每日自动更新国内IP分组文件（生成时间：${{ github.run_started_at }}）"
+            git push origin main  # 推送至 main 分支（若分支名不同，需改为实际分支名）
+            echo "=== 文件提交并推送成功 ==="
+          fi
+        env:
+          # 自动注入 GitHub 授权 Token，无需手动配置
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 删除旧的工作流运行记录（保留最近10条）
+      ##########################################################################
+      # 步骤6（可选）：清理旧工作流记录（避免日志堆积）
+      ##########################################################################
+      - name: 清理旧工作流记录（保留最近5条）
         uses: Mattraks/delete-workflow-runs@v2
         with:
           token: ${{ github.token }}
-          keep_minimum_runs: 10
+          repository: ${{ github.repository }}
+          keep_minimum_runs: 5
+          workflow_id: "每日更新爱快国内IP分组"  # 需与工作流名称一致
