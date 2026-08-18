@@ -95,15 +95,16 @@ def split_into_chunks(lst, chunk_size=RECORDS_PER_ID):
 
 
 def generate_ikuai_records(ip_chunks, start_id, base_group_name):
-    """生成爱快格式记录 - 修复了注释中包含%20的问题"""
+    """生成爱快格式记录 - 新格式：group_value=[{"ip":"CIDR","comment":""},...]"""
     records = []
     current_id = start_id
     for index, chunk in enumerate(ip_chunks):
         group_name = f"{base_group_name}-{index + 1}"
-        # 修复：使用普通空格代替%20编码
-        comment = ", ".join(chunk)
-        addr_pool = ",".join([cidr.split("/")[0] for cidr in chunk])
-        records.append(f"id={current_id} comment={comment} group_name={group_name} addr_pool={addr_pool}")
+        # 新格式：group_value JSON数组（注意逗号后不能有空格）
+        group_value = "[" + ",".join(
+            f'{{"ip":"{cidr}","comment":""}}' for cidr in chunk
+        ) + "]"
+        records.append(f"id={current_id} group_name={group_name} group_value={group_value}")
         current_id += 1
     return records
 
@@ -114,7 +115,10 @@ def save_to_local(records, filename, start_id, base_group_name):
         with open(filename, "w", encoding="utf-8") as f:
             f.write("\n".join(records))
         
-        total = sum(len(record.split("comment=")[1].split(", ")) for record in records)
+        total = sum(
+            len(record.split("group_value=")[1].count('{"ip":'))
+            for record in records
+        )
         print(f"\n[✅] 文件生成成功：{os.path.abspath(filename)}")
         print(f"[📊] 统计：{len(records)}条记录 | ID范围：{start_id}~{start_id + len(records) - 1}")
         print(f"[📊] 组名：{base_group_name}-1~{base_group_name}-{len(records)} | 总地址段：{total}")
